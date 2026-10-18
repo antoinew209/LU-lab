@@ -360,10 +360,10 @@ function renderProg(){
 
 // ---------- démarrage ----------
 function noAccess(err){
-  $("msg").hidden = false;
+  $("msg").hidden = false; $("tabs").hidden = true;
   $("msg").innerHTML = !KEY || /lien/.test(err && err.message || "")
     ? `<div class="card"><h2>Ouvrez votre lien</h2><p>Pour voir vos révisions, ouvrez le lien personnel qu'on vous a envoyé.</p></div>`
-    : `<div class="card"><h2>Pas de connexion</h2><p>Vérifiez votre connexion internet, puis réessayez.</p><button class="next" onclick="location.reload()" style="align-self:flex-start">Réessayer</button></div>`;
+    : `<div class="card"><h2>Pas de connexion</h2><p>Vérifiez votre connexion internet, puis réessayez.</p><p class="hint">Détail : ${esc(err && err.message || err || "inconnu")}</p><button class="next" onclick="location.reload()" style="align-self:flex-start">Réessayer</button></div>`;
 }
 let fetchedAt = 0;
 function loadData(){
