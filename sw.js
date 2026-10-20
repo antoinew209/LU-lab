@@ -1,5 +1,5 @@
 // Affiche tout de suite la dernière copie de la page (même hors ligne) et va chercher la nouvelle pour la fois suivante.
-const CACHE = "lu-lab-v5";  // changer le numéro pour jeter l'ancienne copie
+const CACHE = "lu-lab-v6";  // changer le numéro pour jeter l'ancienne copie
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then(c => c.addAll(["./", "icon-lu-180.png", "manifest.webmanifest"].map(u => new Request(u, { cache: "reload" }))))); });
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {

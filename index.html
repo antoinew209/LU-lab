@@ -35,6 +35,7 @@ h2{font-family:var(--display);font-size:1.25rem;margin:0;text-wrap:balance}
 .tracks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .track{font:inherit;font-weight:600;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;padding:8px 4px;border-radius:8px;border:2px solid var(--tc);background:transparent;color:var(--tc);cursor:pointer;min-width:0}
 .track[aria-pressed="true"]{background:var(--tc);color:var(--bg)}
+[hidden]{display:none!important}
 .tabs4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;width:100%}
 .tabs4.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .tabs4 .tab{padding:6px 2px;text-align:center;border:2px solid var(--mc);color:var(--mc);background:transparent}
@@ -112,6 +113,22 @@ const EXEC = "https://script.google.com/macros/s/AKfycbynqHcODcQanmFSOrJnvCRdLOb
 // Son lien porte la clé (…/LU-lab/#k=…) : ce code public n'en contient aucune ; elle reste sur le téléphone après la première visite.
 const store = { get(k){ try { return JSON.parse(localStorage.getItem("lux-" + k)); } catch(e){ return null; } }, set(k,v){ try { localStorage.setItem("lux-" + k, JSON.stringify(v)); } catch(e){} } };
 const KEY = (() => { const m = /[#&]k=([\w-]+)/.exec(location.hash); if (m) store.set("key", m[1]); return m ? m[1] : store.get("key") || ""; })();
+// L'icône d'écran d'accueil (iPhone) a son propre stockage : on garde la clé dans l'adresse et dans le manifeste pour qu'elle suive.
+if (KEY) {
+  if (!/[#&]k=/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search + "#k=" + KEY);
+  try {
+    const base = location.href.split("#")[0], abs = u => new URL(u, base).href;
+    const man = { name:"Lëtzebuergesch", short_name:"Lëtzebuergesch", display:"standalone", background_color:"#14161b", theme_color:"#14161b",
+      scope: abs("./"), start_url: base + "#k=" + KEY,
+      icons:[{src:abs("icon-lu-180.png"),sizes:"180x180",type:"image/png"},{src:abs("icon-lu-512.png"),sizes:"512x512",type:"image/png"}] };
+    document.querySelector('link[rel="manifest"]').href = "data:application/manifest+json," + encodeURIComponent(JSON.stringify(man));
+  } catch (e) {}
+}
+function useLink(v){
+  const m = /k=([\w-]+)/.exec(v) || /^\s*([\w-]{6,})\s*$/.exec(v);
+  if (!m) { $("lk-err").hidden = false; return; }
+  store.set("key", m[1]); history.replaceState(null, "", location.pathname + "#k=" + m[1]); location.reload();
+}
 const run = (fn, ...args) => fetch(EXEC, { method: "POST", body: JSON.stringify({ k: KEY, fn, args }) })
   .then(r => r.json()).then(r => { if (r.error) throw new Error(r.error); return r.result; });
 
@@ -364,7 +381,7 @@ function renderProg(){
 function noAccess(err){
   $("msg").hidden = false; $("tabs").hidden = true;
   $("msg").innerHTML = !KEY || /lien/.test(err && err.message || "")
-    ? `<div class="card"><h2>Ouvrez votre lien</h2><p>Pour voir vos révisions, ouvrez le lien personnel qu'on vous a envoyé.</p></div>`
+    ? `<div class="card"><h2>Ouvrez votre lien</h2><p>Pour voir vos révisions, ouvrez le lien personnel qu'on vous a envoyé, ou collez-le ici :</p><input class="ti" id="lk" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…#k=…" aria-label="Votre lien"><p class="hint" id="lk-err" hidden>Ce lien ne contient pas de clé. Copiez le lien complet reçu.</p><button class="next" onclick="useLink($('lk').value)" style="align-self:flex-start">Ouvrir</button></div>`
     : `<div class="card"><h2>Pas de connexion</h2><p>Vérifiez votre connexion internet, puis réessayez.</p><p class="hint">Détail : ${esc(err && err.message || err || "inconnu")}</p><button class="next" onclick="location.reload()" style="align-self:flex-start">Réessayer</button></div>`;
 }
 let fetchedAt = 0;
