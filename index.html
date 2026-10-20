@@ -138,7 +138,7 @@ function setup(d){
     const units = Object.keys(d.quiz).filter(n => n.startsWith(pre) && numOf(n) > 0).sort((a,b) => numOf(a) - numOf(b)).map(n => {
       const quiz = d.quiz[n], fs = quiz.fiches ? fiches.filter(f => quiz.fiches.includes(f.name)) : [];
       const diag = /diagnostic/.test(n);
-      return { name:n, num:numOf(n), diag, label: diag ? "Test de niveau (A1 → B1)" : quiz.title, quiz, fiches: fs.length ? fs : fiches };
+      return { name:n, num:numOf(n), diag, label: diag ? "Test de niveau" : quiz.title, quiz, fiches: fs.length ? fs : fiches };
     });
     return { key:s.key, name:s.label, units };
   }).filter(t => t.units.length);
