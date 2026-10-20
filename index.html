@@ -137,7 +137,8 @@ function setup(d){
     const pre = s.key + "-", fiches = Object.keys(d.fiches).filter(n => n.startsWith(pre)).sort().map(n => ({...d.fiches[n], name:n}));
     const units = Object.keys(d.quiz).filter(n => n.startsWith(pre) && numOf(n) > 0).sort((a,b) => numOf(a) - numOf(b)).map(n => {
       const quiz = d.quiz[n], fs = quiz.fiches ? fiches.filter(f => quiz.fiches.includes(f.name)) : [];
-      return { name:n, num:numOf(n), label:quiz.title, quiz, fiches: fs.length ? fs : fiches };
+      const diag = /diagnostic/.test(n);
+      return { name:n, num:numOf(n), diag, label: diag ? "Test de niveau (A1 → B1)" : quiz.title, quiz, fiches: fs.length ? fs : fiches };
     });
     return { key:s.key, name:s.label, units };
   }).filter(t => t.units.length);
@@ -353,7 +354,8 @@ function renderProg(){
     const cards = cardsOf(u), known = cards.filter(c=>F[c.key]).length;
     const rows = Object.entries(th).map(([t,v])=>{ const a = v.seen ? v.sum/v.n : 0, [lab,cls] = v.seen ? lvl(a) : ["Pas encore vu","none"];
       return `<div class="pr"><span class="pt">${esc(t)}</span><span class="pb"><i class="${cls}" style="width:${Math.max(a/4*100, v.seen?6:0)}%"></i></span><span class="pill ${cls}">${lab}</span></div>`; }).join("");
-    return `<div class="card"><h2>${esc(un.label)}</h2>${rows}<p class="hint">Cartes sues : ${known} / ${cards.length}</p></div>`;
+    const note = un.diag ? `<p class="hint">Ce test contient volontairement des questions A2 et B1, pour situer votre niveau. Les quiz suivants seront adaptés à vos résultats.</p>` : "";
+    return `<div class="card"><h2>${esc(un.label)}</h2>${note}${rows}<p class="hint">Cartes sues : ${known} / ${cards.length}</p></div>`;
   }).join("");
   $("prog").innerHTML = `<div class="stack"><p class="hint">${dueN} question${dueN>1?"s":""} à revoir aujourd'hui. Une question réussie revient après 1, 3, 7 puis 14 jours ; une erreur la fait revenir le jour même.</p>${blocks}</div>`;
 }
