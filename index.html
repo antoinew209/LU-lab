@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Lëtzebuergesch">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-lu-180.png">
-<link rel="icon" href="icon-lu-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-lu-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -54,7 +54,7 @@ h2{font-family:var(--display);font-size:1.25rem;margin:0;text-wrap:balance}
 .flash .front{font-family:var(--display);font-size:1.15rem;color:var(--fg)}.flash .back{color:var(--fg)}
 .pr{display:grid;grid-template-columns:minmax(0,1fr) 30% auto;gap:8px;align-items:center;font-size:.9rem}.pt{min-width:0}
 .pb{height:8px;background:var(--line);border-radius:4px;overflow:hidden}.pb i{display:block;height:100%;background:var(--ko)}.pb i.mid{background:var(--accent)}.pb i.ok{background:var(--ok)}
-.pick{font:inherit;font-size:.9rem;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);max-width:100%}
+.pick{font:inherit;font-size:16px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);max-width:100%}
 .hint{font-size:.85rem;color:var(--muted);margin:0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .card p{margin:0;color:var(--muted)}
@@ -112,25 +112,49 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 const EXEC = "https://script.google.com/macros/s/AKfycbynqHcODcQanmFSOrJnvCRdLOb04p7O5phwfWram-ByyKPBr04WBxEgcBNe6cDZZJJO/exec";
 // Son lien porte la clé (…/LU-lab/#k=…) : ce code public n'en contient aucune ; elle reste sur le téléphone après la première visite.
 const store = { get(k){ try { return JSON.parse(localStorage.getItem("lux-" + k)); } catch(e){ return null; } }, set(k,v){ try { localStorage.setItem("lux-" + k, JSON.stringify(v)); } catch(e){} } };
-const KEY = (() => { const m = /[#&]k=([\w-]+)/.exec(location.hash); if (m) store.set("key", m[1]); return m ? m[1] : store.get("key") || ""; })();
-// L'icône d'écran d'accueil (iPhone) a son propre stockage : on garde la clé dans l'adresse et dans le manifeste pour qu'elle suive.
-if (KEY) {
-  if (!/[#&]k=/.test(location.hash)) history.replaceState(null, "", location.pathname + location.search + "#k=" + KEY);
-  try {
-    const base = location.href.split("#")[0], abs = u => new URL(u, base).href;
-    const man = { name:"Lëtzebuergesch", short_name:"Lëtzebuergesch", display:"standalone", background_color:"#14161b", theme_color:"#14161b",
-      scope: abs("./"), start_url: base + "#k=" + KEY,
-      icons:[{src:abs("icon-lu-180.png"),sizes:"180x180",type:"image/png"},{src:abs("icon-lu-512.png"),sizes:"512x512",type:"image/png"}] };
-    document.querySelector('link[rel="manifest"]').href = "data:application/manifest+json," + encodeURIComponent(JSON.stringify(man));
-  } catch (e) {}
-}
+const KEY = (() => {
+  const m = /[#&]k=([\w-]+)/.exec(location.hash);
+  if (m) { store.set("key", m[1]); history.replaceState(null, "", location.pathname + location.search); }   // le code ne reste pas dans l'adresse
+  return m ? m[1] : store.get("key") || "";
+})();
+// L'icône d'écran d'accueil (iPhone) a sa propre mémoire : le code (ou le lien) s'y saisit une fois.
 function useLink(v){
   const m = /k=([\w-]+)/.exec(v) || /^\s*([\w-]{6,})\s*$/.exec(v);
   if (!m) { $("lk-err").hidden = false; return; }
-  store.set("key", m[1]); history.replaceState(null, "", location.pathname + "#k=" + m[1]); location.reload();
+  store.set("key", m[1]); location.reload();
 }
 const run = (fn, ...args) => fetch(EXEC, { method: "POST", body: JSON.stringify({ k: KEY, fn, args }) })
-  .then(r => r.json()).then(r => { if (r.error) throw new Error(r.error); return r.result; });
+  .then(r => r.json()).then(r => { if (r.error) throw Object.assign(new Error(r.error), { server: true }); return r.result; });
+
+// ---------- hors ligne : envois en file ----------
+// Un envoi qui échoue faute de réseau attend sur l'appareil et part dans l'ordre au retour du réseau.
+// Un refus du serveur n'est pas mis en file. Pour la progression, seule la plus récente compte.
+const queue = () => store.get("queue") || [];
+const setQueue = q => store.set("queue", q);
+let flushing = false;
+function flush(){
+  const q = queue();
+  if (flushing || !q.length || !KEY) return Promise.resolve();
+  flushing = true;
+  return run(q[0].fn, q[0].arg).then(() => true, e => e.server).then(done => {
+    flushing = false;
+    if (!done) return status(`Hors ligne : ${queue().length} envoi(s) en attente sur l'appareil.`);
+    setQueue(queue().slice(1));
+    if (queue().length) return flush();
+    status("Réseau retrouvé : tout est envoyé.");
+  });
+}
+function send(fn, arg){
+  const item = { fn, arg };
+  if (fn === "enregistrerEtat") { const d = store.get("data"); if (d) { d.etat = arg; store.set("data", d); } }
+  const later = () => {
+    setQueue(queue().filter(x => !(fn === "enregistrerEtat" && x.fn === fn)).concat([item]));
+    return { queued: true };
+  };
+  if (queue().length) { const r = later(); flush(); return Promise.resolve(r); }   // garder l'ordre des envois
+  return run(fn, arg).catch(e => { if (e.server) throw e; return later(); });
+}
+window.addEventListener("online", () => flush());
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -175,14 +199,14 @@ const save = () => {                            // un seul envoi par pause de 2 
   touched = true;
   store.set("etat", {stats:S, cards:F});
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => run("enregistrerEtat", {stats:S, cards:F, refl:{}})
-    .then(() => status("Progression enregistrée."))
-    .catch(() => status("Progression non enregistrée (réseau ?). Elle sera renvoyée à la prochaine réponse.")), 2000);
+  saveTimer = setTimeout(() => send("enregistrerEtat", {stats:S, cards:F, refl:{}})
+    .then(r => status(r && r.queued ? "Hors ligne : progression gardée sur l'appareil, envoi au retour du réseau." : "Progression enregistrée."))
+    .catch(e => status("Progression refusée : " + (e && e.message || e) + ".")), 2000);
 };
 function sendResult(r){
-  run("enregistrerResultat", r)
-    .then(() => status("Résultat envoyé : le prochain quiz sera préparé à partir de vos erreurs."))
-    .catch(e => status("Résultat non envoyé : " + (e && e.message || e) + ". Réessayez plus tard."));
+  send("enregistrerResultat", r)
+    .then(x => status(x && x.queued ? "Hors ligne : résultat gardé sur l'appareil, envoi au retour du réseau." : "Résultat envoyé : le prochain quiz sera préparé à partir de vos erreurs."))
+    .catch(e => status("Résultat refusé : " + (e && e.message || e) + "."));
 }
 
 // ---------- navigation ----------
@@ -379,23 +403,44 @@ function renderProg(){
 
 // ---------- démarrage ----------
 function noAccess(err){
-  $("msg").hidden = false; $("tabs").hidden = true;
-  $("msg").innerHTML = !KEY || /lien/.test(err && err.message || "")
-    ? `<div class="card"><h2>Ouvrez votre lien</h2><p>Pour voir vos révisions, ouvrez le lien personnel qu'on vous a envoyé, ou collez-le ici :</p><input class="ti" id="lk" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…#k=…" aria-label="Votre lien"><p class="hint" id="lk-err" hidden>Ce lien ne contient pas de clé. Copiez le lien complet reçu.</p><button class="next" onclick="useLink($('lk').value)" style="align-self:flex-start">Ouvrir</button></div>`
+  $("msg").hidden = false; $("tabs").hidden = true; $("pick").hidden = true;
+  const bad = KEY && /lien/.test(err && err.message || "");
+  if (bad) store.set("key", "");                                   // code refusé : on le redemande
+  $("msg").innerHTML = !KEY || bad
+    ? `<div class="card"><h2>${bad ? "Code incorrect" : "Code d'accès"}</h2><p>Collez ici le lien personnel reçu (ou seulement son code). Il reste mémorisé sur cet appareil.</p><input class="ti" id="lk" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…#k=…" aria-label="Votre lien ou code"><p class="hint" id="lk-err" hidden>Ce lien ne contient pas de code. Copiez le lien complet reçu.</p><button class="next" id="lk-ok" style="align-self:flex-start">Ouvrir</button></div>`
     : `<div class="card"><h2>Pas de connexion</h2><p>Vérifiez votre connexion internet, puis réessayez.</p><p class="hint">Détail : ${esc(err && err.message || err || "inconnu")}</p><button class="next" onclick="location.reload()" style="align-self:flex-start">Réessayer</button></div>`;
+  if ($("lk")) { $("lk-ok").onclick = () => useLink($("lk").value); $("lk").onkeydown = e => { if (e.key === "Enter") useLink($("lk").value); }; }
 }
 let fetchedAt = 0;
 function loadData(){
   fetchedAt = Date.now();
   return run("data").then(d => {
     if (!d || !d.subjects) throw new Error("données");
+    const mine = queue().filter(x => x.fn === "enregistrerEtat").pop();   // progression faite hors ligne, pas encore envoyée
+    if (mine) d.etat = mine.arg;
     const etat = store.get("etat");
     store.set("data", d);
     if (!DATA || !touched) { if (etat && touched) d.etat = etat; setup(d); }   // ne jamais l'arracher à un quiz en cours
+    flush();
   });
 }
-if (KEY) { const d = store.get("data"); if (d && d.subjects) setup(d); }
-if (!KEY) noAccess(); else loadData().catch(err => { if (!DATA) noAccess(err); });
+// Repère : la page est gardée par le service worker et les données sont sur l'appareil.
+function readyMark(){
+  if (!("serviceWorker" in navigator) || !store.get("data") || $("offline-ok")) return;
+  navigator.serviceWorker.ready.then(() => {
+    if ($("offline-ok") || !store.get("data")) return;
+    const p = document.createElement("p"); p.className = "note"; p.id = "offline-ok";
+    p.textContent = "✓ Prêt pour le mode avion · version 22/10";
+    document.querySelector(".wrap").appendChild(p);
+  }).catch(() => {});
+}
+if (KEY) { const d = store.get("data"); if (d && d.subjects) { setup(d); readyMark(); } }
+if (!KEY) noAccess();
+else loadData().then(readyMark, err => {
+  if (!DATA) return noAccess(err);
+  if (/lien/.test(err && err.message || "")) return noAccess(err);
+  status("Hors ligne : version gardée sur l'appareil. Vos réponses partiront au retour du réseau.");
+});
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !touched && Date.now() - fetchedAt > 120000) loadData().catch(() => {}); });
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
